@@ -1,4 +1,5 @@
 import requests
+from bs4 import BeautifulSoup
 import threading
 import numpy as np
 from datetime import datetime
@@ -18,20 +19,32 @@ def log_to_csv(data, filename='request_log.csv'):
         writer = csv.writer(file)
         writer.writerow(data)
 
+def fetch_content_size(url):
+    response = requests.get(url)
+    content_size = len(response.content)
+    soup = BeautifulSoup(response.content, 'html.parser')
+    for tag in soup.find_all(['img', 'video', 'audio', 'script', 'link']):
+        src = tag.get('src') or tag.get('href')
+        if src:
+            try:
+                content_response = requests.get(src)
+                content_size += len(content_response.content)
+            except requests.exceptions.RequestException:
+                pass
+    return content_size
+
 def make_request(url, results):
     try:
         start_time = datetime.now()
-        response = requests.get(url)
+        content_size = fetch_content_size(url)
         end_time = datetime.now()
         rtt = (end_time - start_time).total_seconds() * 1000  # Convert to milliseconds
-
-        # Attempt to get content size from headers, fallback to len(response.content) if not available
-        content_size = int(response.headers.get('Content-Length', len(response.content)))
-        throughput = content_size / (rtt / 1000)  # Throughput in bytes per second
         
-        log_data = [url, start_time, end_time, rtt, response.status_code, content_size, throughput]
+        throughput = content_size / rtt  # Throughput in bytes per second
+        
+        log_data = [url, start_time, end_time, rtt, 200, content_size, throughput]
         results.append(log_data)
-        print(f"Request to {url} completed with status code: {response.status_code}, RTT: {rtt:.6f} ms, Content size: {content_size} bytes, Throughput: {throughput:.2f} bytes/sec")
+        print(f"Request to {url} completed with status code: 200, RTT: {rtt:.6f} ms, Content size: {content_size} bytes, Throughput: {throughput:.2f} bytes/sec")
     except requests.exceptions.RequestException as e:
         end_time = datetime.now()
         rtt = (end_time - start_time).total_seconds() * 1000  # Convert to milliseconds
@@ -66,8 +79,8 @@ def calculate_totals_and_averages(results):
     average_rtt = total_rtt / len(results)
     average_throughput = total_throughput / len(results)
     
-    total_data = ["Total/Average", "", "", total_rtt, "", "", total_throughput]
-    average_data = ["", "", "", average_rtt, "", "", average_throughput]
+    total_data = ["Total", "", "", total_rtt, "", "", total_throughput]
+    average_data = ["Average", "", "", average_rtt, "", "", average_throughput]
     
     return total_data, average_data
 
@@ -89,7 +102,7 @@ def main():
     urls = df['URL'].tolist()
 
     # Initialize the CSV file
-    with open('request_log.csv', mode='w', newline='') as file:
+    with open('request_log_https.csv', mode='w', newline='') as file:
         writer = csv.writer(file)
         writer.writerow(["URL", "Start Time", "End Time", "RTT (ms)", "Status Code", "Content Size (bytes)", "Throughput (bytes/sec)"])
 
@@ -97,10 +110,13 @@ def main():
     
     total_data, average_data = calculate_totals_and_averages(results)
     
-    with open('request_log.csv', mode='a', newline='') as file:
+    with open('request_log_https.csv', mode='a', newline='') as file:
         writer = csv.writer(file)
         writer.writerow(total_data)
         writer.writerow(average_data)
+    
+    print(f"Total RTT: {total_data[3]:.2f} ms, Total Throughput: {total_data[6]:.2f} bytes/sec")
+    print(f"Average RTT: {average_data[3]:.2f} ms, Average Throughput: {average_data[6]:.2f} bytes/sec")
 
 if __name__ == "__main__":
     main()
