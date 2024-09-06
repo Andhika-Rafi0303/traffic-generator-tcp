@@ -6,6 +6,7 @@ import csv
 import pandas as pd
 import argparse
 import time
+from urllib.parse import urljoin
 
 def zipf_mandelbrot(N, q, s):
     ranks = np.arange(1, N + 1)
@@ -23,7 +24,9 @@ def fetch_content_size(url):
     try:
         response = requests.get(url)
         content_size += len(response.content)
-        links = extract_links(response.text)
+        
+        # Extract and fetch linked resources
+        links = extract_links(response.text, url)
         for link in links:
             try:
                 content_response = requests.get(link)
@@ -34,7 +37,7 @@ def fetch_content_size(url):
         pass
     return content_size
 
-def extract_links(html):
+def extract_links(html, base_url):
     links = []
     start = 0
     while True:
@@ -46,8 +49,10 @@ def extract_links(html):
         start_quote = html.find("\"", start_link + 1)
         end_quote = html.find("\"", start_quote + 1)
         link = html[start_quote + 1: end_quote]
-        if link.startswith("http"):
-            links.append(link)
+        if link.startswith(("http", "//")):
+            links.append(link if link.startswith("http") else "http:" + link)
+        else:
+            links.append(urljoin(base_url, link))
         start = end_quote + 1
     return links
 
