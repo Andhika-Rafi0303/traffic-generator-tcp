@@ -1,5 +1,4 @@
 import requests
-from bs4 import BeautifulSoup
 import threading
 import numpy as np
 from datetime import datetime
@@ -14,24 +13,43 @@ def zipf_mandelbrot(N, q, s):
     probabilities = weights / weights.sum()
     return probabilities
 
-def log_to_csv(data, filename='request_log.csv'):
+def log_to_csv(data, filename='request_log_http.csv'):
     with open(filename, mode='a', newline='') as file:
         writer = csv.writer(file)
         writer.writerow(data)
 
 def fetch_content_size(url):
-    response = requests.get(url)
-    content_size = len(response.content)
-    soup = BeautifulSoup(response.content, 'html.parser')
-    for tag in soup.find_all(['img', 'video', 'audio', 'script', 'link']):
-        src = tag.get('src') or tag.get('href')
-        if src:
+    content_size = 0
+    try:
+        response = requests.get(url)
+        content_size += len(response.content)
+        links = extract_links(response.text)
+        for link in links:
             try:
-                content_response = requests.get(src)
+                content_response = requests.get(link)
                 content_size += len(content_response.content)
             except requests.exceptions.RequestException:
                 pass
+    except requests.exceptions.RequestException:
+        pass
     return content_size
+
+def extract_links(html):
+    links = []
+    start = 0
+    while True:
+        start_link = html.find("src=\"", start)
+        if start_link == -1:
+            start_link = html.find("href=\"", start)
+        if start_link == -1:
+            break
+        start_quote = html.find("\"", start_link + 1)
+        end_quote = html.find("\"", start_quote + 1)
+        link = html[start_quote + 1: end_quote]
+        if link.startswith("http"):
+            links.append(link)
+        start = end_quote + 1
+    return links
 
 def make_request(url, results):
     try:
@@ -40,11 +58,11 @@ def make_request(url, results):
         end_time = datetime.now()
         rtt = (end_time - start_time).total_seconds() * 1000  # Convert to milliseconds
         
-        throughput = content_size / rtt  # Throughput in bytes per second
+        throughput = content_size / rtt  # Throughput in bytes per millisecond
         
         log_data = [url, start_time, end_time, rtt, 200, content_size, throughput]
         results.append(log_data)
-        print(f"Request to {url} completed with status code: 200, RTT: {rtt:.6f} ms, Content size: {content_size} bytes, Throughput: {throughput:.2f} bytes/sec")
+        print(f"Request to {url} completed with status code: 200, RTT: {rtt:.6f} ms, Content size: {content_size} bytes, Throughput: {throughput:.2f} bytes/ms")
     except requests.exceptions.RequestException as e:
         end_time = datetime.now()
         rtt = (end_time - start_time).total_seconds() * 1000  # Convert to milliseconds
@@ -104,7 +122,7 @@ def main():
     # Initialize the CSV file
     with open('request_log_https.csv', mode='w', newline='') as file:
         writer = csv.writer(file)
-        writer.writerow(["URL", "Start Time", "End Time", "RTT (ms)", "Status Code", "Content Size (bytes)", "Throughput (bytes/sec)"])
+        writer.writerow(["URL", "Start Time", "End Time", "RTT (ms)", "Status Code", "Content Size (bytes)", "Throughput (bytes/ms)"])
 
     results = generate_traffic(urls, number_of_requests, requests_per_second, zipf_params)
     
@@ -115,8 +133,8 @@ def main():
         writer.writerow(total_data)
         writer.writerow(average_data)
     
-    print(f"Total RTT: {total_data[3]:.2f} ms, Total Throughput: {total_data[6]:.2f} bytes/sec")
-    print(f"Average RTT: {average_data[3]:.2f} ms, Average Throughput: {average_data[6]:.2f} bytes/sec")
+    print(f"Total RTT: {total_data[3]:.2f} ms, Total Throughput: {total_data[6]:.2f} bytes/ms")
+    print(f"Average RTT: {average_data[3]:.2f} ms, Average Throughput: {average_data[6]:.2f} bytes/ms")
 
 if __name__ == "__main__":
     main()
