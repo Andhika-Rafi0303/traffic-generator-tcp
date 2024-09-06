@@ -23,15 +23,19 @@ def make_request(url):
         start_time = datetime.now()
         response = requests.get(url)
         end_time = datetime.now()
-        rtt = (end_time - start_time).total_seconds()
-        content_size = len(response.content)
-        log_data = [url, start_time, end_time, rtt, response.status_code, content_size]
-        print(f"Request to {url} completed with status code: {response.status_code}, RTT: {rtt:.6f} seconds, Content size: {content_size} bytes")
+        rtt = (end_time - start_time).total_seconds() * 1000  # Convert to milliseconds
+
+        # Attempt to get content size from headers, fallback to len(response.content) if not available
+        content_size = int(response.headers.get('Content-Length', len(response.content)))
+        throughput = content_size / (rtt / 1000)  # Throughput in bytes per second
+        
+        log_data = [url, start_time, end_time, rtt, response.status_code, content_size, throughput]
+        print(f"Request to {url} completed with status code: {response.status_code}, RTT: {rtt:.6f} ms, Content size: {content_size} bytes, Throughput: {throughput:.2f} bytes/sec")
     except requests.exceptions.RequestException as e:
         end_time = datetime.now()
-        rtt = (end_time - start_time).total_seconds()
-        log_data = [url, start_time, end_time, rtt, f"Failed: {e}", 0]
-        print(f"Request to {url} failed: {e}, RTT: {rtt:.6f} seconds")
+        rtt = (end_time - start_time).total_seconds() * 1000  # Convert to milliseconds
+        log_data = [url, start_time, end_time, rtt, f"Failed: {e}", 0, 0]
+        print(f"Request to {url} failed: {e}, RTT: {rtt:.6f} ms")
     
     log_to_csv(log_data)
 
@@ -72,7 +76,7 @@ def main():
     # Initialize the CSV file
     with open('request_log.csv', mode='w', newline='') as file:
         writer = csv.writer(file)
-        writer.writerow(["URL", "Start Time", "End Time", "RTT (seconds)", "Status Code", "Content Size (bytes)"])
+        writer.writerow(["URL", "Start Time", "End Time", "RTT (ms)", "Status Code", "Content Size (bytes)", "Throughput (bytes/sec)"])
 
     generate_traffic(urls, number_of_requests, requests_per_second, zipf_params)
 
