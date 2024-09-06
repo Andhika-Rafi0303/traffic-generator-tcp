@@ -24,12 +24,13 @@ def make_request(url):
         response = requests.get(url)
         end_time = datetime.now()
         rtt = (end_time - start_time).total_seconds()
-        log_data = [url, start_time, end_time, rtt, response.status_code]
-        print(f"Request to {url} completed with status code: {response.status_code}, RTT: {rtt:.6f} seconds")
+        content_size = len(response.content)
+        log_data = [url, start_time, end_time, rtt, response.status_code, content_size]
+        print(f"Request to {url} completed with status code: {response.status_code}, RTT: {rtt:.6f} seconds, Content size: {content_size} bytes")
     except requests.exceptions.RequestException as e:
         end_time = datetime.now()
         rtt = (end_time - start_time).total_seconds()
-        log_data = [url, start_time, end_time, rtt, f"Failed: {e}"]
+        log_data = [url, start_time, end_time, rtt, f"Failed: {e}", 0]
         print(f"Request to {url} failed: {e}, RTT: {rtt:.6f} seconds")
     
     log_to_csv(log_data)
@@ -71,7 +72,7 @@ def main():
     # Initialize the CSV file
     with open('request_log.csv', mode='w', newline='') as file:
         writer = csv.writer(file)
-        writer.writerow(["URL", "Start Time", "End Time", "RTT (seconds)", "Status Code"])
+        writer.writerow(["URL", "Start Time", "End Time", "RTT (seconds)", "Status Code", "Content Size (bytes)"])
 
     generate_traffic(urls, number_of_requests, requests_per_second, zipf_params)
 
