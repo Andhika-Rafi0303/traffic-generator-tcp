@@ -18,7 +18,7 @@ def log_to_csv(data, filename='request_log.csv'):
         writer = csv.writer(file)
         writer.writerow(data)
 
-def make_request(url):
+def make_request(url, results):
     try:
         start_time = datetime.now()
         response = requests.get(url)
@@ -30,11 +30,13 @@ def make_request(url):
         throughput = content_size / (rtt / 1000)  # Throughput in bytes per second
         
         log_data = [url, start_time, end_time, rtt, response.status_code, content_size, throughput]
+        results.append(log_data)
         print(f"Request to {url} completed with status code: {response.status_code}, RTT: {rtt:.6f} ms, Content size: {content_size} bytes, Throughput: {throughput:.2f} bytes/sec")
     except requests.exceptions.RequestException as e:
         end_time = datetime.now()
         rtt = (end_time - start_time).total_seconds() * 1000  # Convert to milliseconds
         log_data = [url, start_time, end_time, rtt, f"Failed: {e}", 0, 0]
+        results.append(log_data)
         print(f"Request to {url} failed: {e}, RTT: {rtt:.6f} ms")
     
     log_to_csv(log_data)
@@ -43,10 +45,11 @@ def generate_traffic(urls, num_requests, requests_per_second, zipf_params):
     probabilities = zipf_mandelbrot(len(urls), *zipf_params)
     threads = []
     interval = 1 / requests_per_second
+    results = []
     
     for _ in range(num_requests):
         url = np.random.choice(urls, p=probabilities)
-        thread = threading.Thread(target=make_request, args=(url,))
+        thread = threading.Thread(target=make_request, args=(url, results))
         thread.start()
         threads.append(thread)
         time.sleep(interval)
@@ -55,6 +58,18 @@ def generate_traffic(urls, num_requests, requests_per_second, zipf_params):
         thread.join()
     
     print("Traffic generation completed.")
+    return results
+
+def calculate_totals_and_averages(results):
+    total_rtt = sum(result[3] for result in results)
+    total_throughput = sum(result[6] for result in results)
+    average_rtt = total_rtt / len(results)
+    average_throughput = total_throughput / len(results)
+    
+    total_data = ["Total/Average", "", "", total_rtt, "", "", total_throughput]
+    average_data = ["", "", "", average_rtt, "", "", average_throughput]
+    
+    return total_data, average_data
 
 def main():
     parser = argparse.ArgumentParser(description='Generate traffic for URLs with Zipf distribution.')
@@ -78,7 +93,14 @@ def main():
         writer = csv.writer(file)
         writer.writerow(["URL", "Start Time", "End Time", "RTT (ms)", "Status Code", "Content Size (bytes)", "Throughput (bytes/sec)"])
 
-    generate_traffic(urls, number_of_requests, requests_per_second, zipf_params)
+    results = generate_traffic(urls, number_of_requests, requests_per_second, zipf_params)
+    
+    total_data, average_data = calculate_totals_and_averages(results)
+    
+    with open('request_log.csv', mode='a', newline='') as file:
+        writer = csv.writer(file)
+        writer.writerow(total_data)
+        writer.writerow(average_data)
 
 if __name__ == "__main__":
     main()
